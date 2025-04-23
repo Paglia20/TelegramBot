@@ -1,0 +1,28 @@
+name: Run scanner.py every 15 minutes
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"  # Ogni 15 minuti (UTC)
+  workflow_dispatch:        # Avvio manuale possibile
+
+jobs:
+  run-scanner:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scanner.py
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python scanner.py
