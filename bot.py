@@ -1,16 +1,15 @@
 import os
 import logging
-from pathlib import Path
 from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from utils import add_keyword, remove_keyword, list_keywords
+from firebase_keywords import add_keyword, remove_keyword, get_keywords as list_keywords
 
-# Load environment variables
+# Load environment variables (solo per il token Telegram)
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
-# Logging (Railway will show this in logs tab)
+# Logging (utile per Railway)
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -50,7 +49,7 @@ async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("📭 Nessuna parola chiave attiva.")
 
-# Init bot
+# Setup del bot
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("aggiungi", aggiungi))
@@ -58,5 +57,5 @@ app.add_handler(CommandHandler("elimina", elimina))
 app.add_handler(CommandHandler("lista", lista))
 
 if __name__ == "__main__":
-    logging.info("🤖 Bot avviato su Railway")
+    logging.info("🤖 Bot avviato e collegato a Firebase.")
     app.run_polling()
