@@ -23,7 +23,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Usa:\n"
         "/aggiungi <parola>\n"
         "/elimina <parola>\n"
-        "/lista"
+        "/lista\n"
         "/reset_seen"
     )
 

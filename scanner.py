@@ -32,13 +32,13 @@ def scan_and_notify():
 
         if link not in seen_links and any(kw in title for kw in keywords):
             msg = f"📦 {post['title']}\n💸 {post['price']}\n🔗 {post['link']}"
-            bot.send_message(chat_id=CHAT_ID, text=msg)
+            bot.send_message.sync(chat_id=CHAT_ID, text=msg)
             logging.info(f"✅ Inviato: {post['title']}")
             add_seen_post(link)
             matches += 1
 
     if matches == 0:
-        bot.send_message(chat_id=CHAT_ID, text="⚠️ Nessun annuncio trovato in questa scansione.")
+        bot.send_message.sync(chat_id=CHAT_ID, text="⚠️ Nessun annuncio trovato in questa scansione.")
         logging.info("⚠️ Nessun match trovato.")
 
     logging.info("✅ Scansione completata.")
