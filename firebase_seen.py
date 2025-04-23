@@ -16,3 +16,9 @@ def add_seen_post(link):
     if link not in seen:
         seen.add(link)
         requests.put(FIREBASE_SEEN_URL, json=list(seen))
+
+def reset_seen_posts():
+    try:
+        requests.delete(FIREBASE_SEEN_URL)
+    except Exception as e:
+        print(f"[Firebase] Errore durante il reset dei post visti: {e}")
