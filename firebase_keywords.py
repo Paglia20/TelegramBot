@@ -1,6 +1,5 @@
 import requests
 
-# Usa il tuo URL Firebase (senza / alla fine)
 FIREBASE_URL = "https://telegrambot-7cbb7-default-rtdb.firebaseio.com/keywords.json"
 
 def get_keywords():
