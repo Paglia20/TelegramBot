@@ -5,15 +5,15 @@ import telegram
 from firebase_keywords import get_keywords
 from firebase_seen import get_seen_posts, add_seen_post
 
-# Carica variabili d'ambiente
+# Carica le variabili d'ambiente
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# Inizializza il bot Telegram
+# Inizializza il bot
 bot = telegram.Bot(token=TOKEN)
 
-# Dati fake da scansionare (puoi sostituire con scraping reale)
+# Fake dataset (sostituibile con scraping reale)
 FAKE_POSTS = [
     {"title": "Vendo bici da corsa", "price": "300€", "link": "http://example.com/bici", "image": None},
     {"title": "PlayStation 5 nuova", "price": "450€", "link": "http://example.com/ps5", "image": None},
@@ -24,6 +24,7 @@ def scan_and_notify():
     logging.info("🔍 Inizio scansione...")
     keywords = get_keywords()
     seen_links = get_seen_posts()
+    matches = 0
 
     for post in FAKE_POSTS:
         title = post["title"].lower()
@@ -34,6 +35,11 @@ def scan_and_notify():
             bot.send_message(chat_id=CHAT_ID, text=msg)
             logging.info(f"✅ Inviato: {post['title']}")
             add_seen_post(link)
+            matches += 1
+
+    if matches == 0:
+        bot.send_message(chat_id=CHAT_ID, text="⚠️ Nessun annuncio trovato in questa scansione.")
+        logging.info("⚠️ Nessun match trovato.")
 
     logging.info("✅ Scansione completata.")
 
