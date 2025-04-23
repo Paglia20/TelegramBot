@@ -40,8 +40,10 @@ def scan_and_notify():
             matches += 1
 
     if matches == 0:
-        bot.send_message(chat_id=CHAT_ID, text="⚠️ Nessun annuncio trovato in questa scansione.")
-        logging.info("⚠️ Nessun match trovato.")
+        keywords_str = ", ".join(keywords) if keywords else "(nessuna keyword)"
+        msg = f"⚠️ Nessun annuncio trovato in questa scansione.\n🔍 Parole chiave: {keywords_str}"
+        bot.send_message(chat_id=CHAT_ID, text=msg)
+        logging.info(f"⚠️ Nessun match trovato. Keywords: {keywords_str}")
 
     logging.info("✅ Scansione completata.")
 
