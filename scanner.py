@@ -1,19 +1,19 @@
 import os
 import logging
 from dotenv import load_dotenv
-import telegram
+from telegram import Bot
 from firebase_keywords import get_keywords
 from firebase_seen import get_seen_posts, add_seen_post
 
-# Carica le variabili d'ambiente
+# Carica variabili d'ambiente
 load_dotenv()
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# Inizializza il bot
-bot = telegram.Bot(token=TOKEN)
+# Inizializza bot sincrono
+bot = Bot(token=TOKEN)
 
-# Fake dataset (sostituibile con scraping reale)
+# Fake annunci per simulazione
 FAKE_POSTS = [
     {"title": "Vendo bici da corsa", "price": "300€", "link": "http://example.com/bici", "image": None},
     {"title": "PlayStation 5 nuova", "price": "450€", "link": "http://example.com/ps5", "image": None},
@@ -26,19 +26,21 @@ def scan_and_notify():
     seen_links = get_seen_posts()
     matches = 0
 
+    logging.info(f"🔑 Parole chiave attive: {keywords}")
+
     for post in FAKE_POSTS:
         title = post["title"].lower()
         link = post["link"]
 
         if link not in seen_links and any(kw in title for kw in keywords):
             msg = f"📦 {post['title']}\n💸 {post['price']}\n🔗 {post['link']}"
-            bot.send_message.sync(chat_id=CHAT_ID, text=msg)
+            bot.send_message(chat_id=CHAT_ID, text=msg)
             logging.info(f"✅ Inviato: {post['title']}")
             add_seen_post(link)
             matches += 1
 
     if matches == 0:
-        bot.send_message.sync(chat_id=CHAT_ID, text="⚠️ Nessun annuncio trovato in questa scansione.")
+        bot.send_message(chat_id=CHAT_ID, text="⚠️ Nessun annuncio trovato in questa scansione.")
         logging.info("⚠️ Nessun match trovato.")
 
     logging.info("✅ Scansione completata.")
