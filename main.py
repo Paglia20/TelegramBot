@@ -39,7 +39,7 @@ async def on_startup(app: Application):
     else:
         log.warning("EBAY_CLIENT_ID o EBAY_CLIENT_SECRET mancanti: il bot parte, ma non cerca annunci")
 
-    notifier = Notifier(app.bot, config.TELEGRAM_CHAT_ID)
+    notifier = Notifier(app.bot, lambda: telegram_ui.recipients(store))
     monitor = Monitor(store, notifier, sources, missing_credentials=missing)
     app.bot_data["monitor"] = monitor
     await app.bot.set_my_commands(telegram_ui.COMMANDS)

@@ -159,6 +159,30 @@ class UsageAndSessionsTest(unittest.TestCase):
         self.assertFalse(self.store.session_valid("valid"))
 
 
+class UsersAndInvitesTest(unittest.TestCase):
+    def setUp(self):
+        self.store = temp_storage()
+
+    def test_users(self):
+        self.assertTrue(self.store.add_user(99, "Luca", 42))
+        self.assertFalse(self.store.add_user(99, "Luca", 42))
+        self.assertTrue(self.store.is_user(99))
+        self.assertEqual([u["name"] for u in self.store.users()], ["Luca"])
+        self.assertEqual(self.store.remove_user(99), "Luca")
+        self.assertFalse(self.store.is_user(99))
+        self.assertIsNone(self.store.remove_user(99))
+
+    def test_invite_is_single_use(self):
+        self.store.create_invite("h", time.time() + 60, 42)
+        self.assertEqual(self.store.use_invite("h"), 42)
+        self.assertIsNone(self.store.use_invite("h"))
+        self.assertIsNone(self.store.use_invite("sconosciuto"))
+
+    def test_expired_invite(self):
+        self.store.create_invite("h", time.time() - 1, 42)
+        self.assertIsNone(self.store.use_invite("h"))
+
+
 class MigrationTest(unittest.TestCase):
     def test_old_database_gets_image_column(self):
         path = Path(tempfile.mkdtemp()) / "old.db"

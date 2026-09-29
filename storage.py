@@ -47,6 +47,18 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at REAL NOT NULL,
     expires_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (
+    chat_id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    added_at REAL NOT NULL,
+    invited_by INTEGER
+);
+CREATE TABLE IF NOT EXISTS invites (
+    token_hash TEXT PRIMARY KEY,
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    created_by INTEGER
+);
 CREATE TABLE IF NOT EXISTS api_usage (
     day TEXT PRIMARY KEY,
     calls INTEGER NOT NULL
@@ -225,6 +237,36 @@ class Storage:
 
     def clear_sessions(self) -> int:
         return self.db.execute("DELETE FROM sessions").rowcount
+
+    def add_user(self, chat_id: int, name: str, invited_by: Optional[int] = None) -> bool:
+        cur = self.db.execute(
+            "INSERT OR IGNORE INTO users(chat_id, name, added_at, invited_by) VALUES(?,?,?,?)",
+            (chat_id, name, time.time(), invited_by),
+        )
+        return cur.rowcount > 0
+
+    def remove_user(self, chat_id: int) -> Optional[str]:
+        row = self.db.execute("SELECT name FROM users WHERE chat_id=?", (chat_id,)).fetchone()
+        self.db.execute("DELETE FROM users WHERE chat_id=?", (chat_id,))
+        return row["name"] if row else None
+
+    def users(self) -> list:
+        return [dict(r) for r in self.db.execute("SELECT chat_id, name, added_at FROM users ORDER BY added_at")]
+
+    def is_user(self, chat_id: int) -> bool:
+        return self.db.execute("SELECT 1 FROM users WHERE chat_id=?", (chat_id,)).fetchone() is not None
+
+    def create_invite(self, token_hash: str, expires_at: float, created_by: int):
+        self.db.execute("DELETE FROM invites WHERE expires_at<?", (time.time(),))
+        self.db.execute("INSERT INTO invites(token_hash, created_at, expires_at, created_by) VALUES(?,?,?,?)",
+                        (token_hash, time.time(), expires_at, created_by))
+
+    def use_invite(self, token_hash: str) -> Optional[int]:
+        row = self.db.execute("SELECT created_by, expires_at FROM invites WHERE token_hash=?", (token_hash,)).fetchone()
+        if row is None:
+            return None
+        self.db.execute("DELETE FROM invites WHERE token_hash=?", (token_hash,))
+        return row["created_by"] if row["expires_at"] > time.time() else None
 
     @staticmethod
     def _today() -> str:

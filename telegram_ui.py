@@ -1,4 +1,7 @@
+import hashlib
 import html
+import secrets
+import time
 from datetime import datetime
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -24,10 +27,37 @@ COMMANDS = [
     BotCommand("stato", "Stato del monitor e consumo quota eBay"),
     BotCommand("dashboard", "Link alla dashboard"),
     BotCommand("revoca_dashboard", "Scollega tutti i browser dalla dashboard"),
+    BotCommand("invita", "Crea un link d'invito per un amico"),
+    BotCommand("utenti", "Vedi e rimuovi le persone collegate"),
     BotCommand("pausa", "Metti in pausa il monitoraggio"),
     BotCommand("riprendi", "Riprendi il monitoraggio"),
     BotCommand("annulla", "Annulla l'inserimento in corso"),
 ]
+
+
+def is_owner(chat_id) -> bool:
+    return bool(config.TELEGRAM_CHAT_ID) and chat_id == config.TELEGRAM_CHAT_ID
+
+
+def is_authorized(store, chat_id) -> bool:
+    return is_owner(chat_id) or store.is_user(chat_id)
+
+
+def recipients(store) -> list:
+    return [config.TELEGRAM_CHAT_ID] + [u["chat_id"] for u in store.users()]
+
+
+def _invite_hash(code: str) -> str:
+    return hashlib.sha256(code.encode()).hexdigest()
+
+
+class AuthorizedChat(filters.MessageFilter):
+    def __init__(self, store):
+        super().__init__(name="AuthorizedChat")
+        self.store = store
+
+    def filter(self, message) -> bool:
+        return is_authorized(self.store, message.chat.id)
 
 
 def _store(ctx):
@@ -56,6 +86,7 @@ def view_main(ctx):
         f"Parole monitorate: {len(store.keywords())}\n"
         f"Parole escluse: {len(store.excludes())}\n"
         f"Mercati attivi: {len(store.enabled_markets)} di {len(config.EBAY_MARKETS)}\n"
+        f"Persone collegate: {1 + len(store.users())}\n"
         f"Controllo ogni: {_fmt_seconds(budget.effective)}"
     )
     kb = [
@@ -218,6 +249,62 @@ async def cmd_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await _show(update, ctx, view_main, edit=False)
 
 
+async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat = update.effective_chat
+    store = _store(ctx)
+    if is_authorized(store, chat.id):
+        await cmd_menu(update, ctx)
+        return
+    code = ctx.args[0] if ctx.args else ""
+    if chat.type != "private" or not code.startswith("inv_"):
+        return
+    inviter = store.use_invite(_invite_hash(code[4:]))
+    if inviter is None:
+        await chat.send_message("Questo link d'invito è scaduto o è già stato usato. Chiedine uno nuovo.")
+        return
+    user = update.effective_user
+    name = (user.full_name or user.username or str(chat.id)) if user else str(chat.id)
+    store.add_user(chat.id, name, inviter)
+    await chat.send_message(
+        "Sei collegato al monitor annunci. Riceverai i nuovi annunci qui e puoi gestire parole, "
+        "esclusioni, mercati e timer. Scrivi /menu quando vuoi."
+    )
+    await cmd_menu(update, ctx)
+    try:
+        await ctx.bot.send_message(config.TELEGRAM_CHAT_ID, f"{name} si è collegato con il tuo link d'invito.")
+    except Exception:
+        pass
+
+
+async def cmd_invita(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    code = secrets.token_urlsafe(24)
+    expires = time.time() + config.INVITE_HOURS * 3600
+    _store(ctx).create_invite(_invite_hash(code), expires, update.effective_chat.id)
+    link = f"https://t.me/{ctx.bot.username}?start=inv_{code}"
+    await update.effective_chat.send_message(
+        f"Link d'invito, valido {config.INVITE_HOURS} ore e per una sola persona. "
+        f"Mandalo al tuo amico: lo apre, preme Avvia ed è collegato.\n\n{link}",
+        disable_web_page_preview=True,
+    )
+
+
+def view_users(ctx):
+    users = _store(ctx).users()
+    if users:
+        lines = [f"- {html.escape(u['name'])} (dal {datetime.fromtimestamp(u['added_at']).strftime('%d/%m/%Y')})"
+                 for u in users]
+        text = "<b>Persone collegate</b>\n\nOltre a te:\n" + "\n".join(lines) + "\n\nTocca un nome per rimuoverlo."
+    else:
+        text = "<b>Persone collegate</b>\n\nSolo tu. Usa /invita per creare un link d'invito."
+    kb = [[BTN(f"Rimuovi: {u['name']}"[:60], callback_data=f"ud:{u['chat_id']}")] for u in users]
+    return text, InlineKeyboardMarkup(kb) if kb else None
+
+
+async def cmd_utenti(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    text, kb = view_users(ctx)
+    await update.effective_chat.send_message(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+
+
 async def cmd_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.effective_chat.send_message(f"Il CHAT_ID di questa chat è: {update.effective_chat.id}")
 
@@ -333,7 +420,7 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if update.effective_chat is None or update.effective_chat.id != config.TELEGRAM_CHAT_ID:
+    if update.effective_chat is None or not is_authorized(_store(ctx), update.effective_chat.id):
         await query.answer()
         return
     data = query.data or ""
@@ -380,6 +467,18 @@ async def on_button(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif data.startswith("ts:"):
         _set_timer(ctx, data[3:])
         await _show(update, ctx, view_timer, edit=True)
+    elif data.startswith("ud:"):
+        if not is_owner(update.effective_chat.id) or not data[3:].lstrip("-").isdigit():
+            return
+        removed_id = int(data[3:])
+        name = store.remove_user(removed_id)
+        text, kb = view_users(ctx)
+        await query.edit_message_text(text, parse_mode=ParseMode.HTML, reply_markup=kb)
+        if name:
+            try:
+                await ctx.bot.send_message(removed_id, "Il tuo accesso al monitor annunci è stato revocato.")
+            except Exception:
+                pass
     elif data.startswith("mt:"):
         if data[3:] in config.EBAY_MARKETS:
             store.toggle_market(data[3:])
@@ -399,14 +498,18 @@ def register(app: Application):
     if not config.TELEGRAM_CHAT_ID:
         app.add_handler(MessageHandler(filters.ALL, cmd_not_configured))
         return
-    me = filters.Chat(chat_id=config.TELEGRAM_CHAT_ID)
+    allowed = AuthorizedChat(app.bot_data["store"])
+    owner = filters.Chat(chat_id=config.TELEGRAM_CHAT_ID)
+    app.add_handler(CommandHandler("start", cmd_start))
     handlers = {
-        "start": cmd_menu, "menu": cmd_menu, "aggiungi": cmd_aggiungi, "rimuovi": cmd_rimuovi,
+        "menu": cmd_menu, "aggiungi": cmd_aggiungi, "rimuovi": cmd_rimuovi,
         "escludi": cmd_escludi, "includi": cmd_includi, "timer": cmd_timer, "mercati": cmd_mercati,
-        "stato": cmd_stato, "dashboard": cmd_dashboard, "revoca_dashboard": cmd_revoca,
-        "pausa": cmd_pausa, "riprendi": cmd_riprendi, "annulla": cmd_annulla,
+        "stato": cmd_stato, "dashboard": cmd_dashboard, "pausa": cmd_pausa, "riprendi": cmd_riprendi,
+        "annulla": cmd_annulla,
     }
     for name, fn in handlers.items():
-        app.add_handler(CommandHandler(name, fn, filters=me))
+        app.add_handler(CommandHandler(name, fn, filters=allowed))
+    for name, fn in {"invita": cmd_invita, "utenti": cmd_utenti, "revoca_dashboard": cmd_revoca}.items():
+        app.add_handler(CommandHandler(name, fn, filters=owner))
     app.add_handler(CallbackQueryHandler(on_button))
-    app.add_handler(MessageHandler(me & filters.TEXT & ~filters.COMMAND, on_text))
+    app.add_handler(MessageHandler(allowed & filters.TEXT & ~filters.COMMAND, on_text))
