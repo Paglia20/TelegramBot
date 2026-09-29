@@ -9,6 +9,8 @@ import config
 from matching import normalize
 from models import Keyword, Listing
 
+LEGACY_MARKETS = ("EBAY_IT", "EBAY_DE", "EBAY_CH", "EBAY_FR", "EBAY_BE", "EBAY_NL", "EBAY_US")
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -108,20 +110,29 @@ class Storage:
     def paused(self, value: bool):
         self._set("paused", bool(value))
 
+    def _disabled_markets(self) -> list:
+        disabled = self._get("disabled_markets", None)
+        if disabled is None:
+            legacy = self._get("enabled_markets", None)
+            disabled = [m for m in LEGACY_MARKETS if legacy is not None and m not in legacy]
+            self._set("disabled_markets", disabled)
+            self.db.execute("DELETE FROM settings WHERE key='enabled_markets'")
+        return disabled
+
     @property
     def enabled_markets(self) -> list:
-        saved = self._get("enabled_markets", list(config.EBAY_MARKETS))
-        return [m for m in config.EBAY_MARKETS if m in saved]
+        disabled = set(self._disabled_markets())
+        return [m for m in config.EBAY_MARKETS if m not in disabled]
 
     def toggle_market(self, market_id: str) -> bool:
-        current = set(self.enabled_markets)
-        if market_id in current:
-            current.discard(market_id)
-            enabled = False
-        else:
-            current.add(market_id)
+        disabled = set(self._disabled_markets())
+        if market_id in disabled:
+            disabled.discard(market_id)
             enabled = True
-        self._set("enabled_markets", [m for m in config.EBAY_MARKETS if m in current])
+        else:
+            disabled.add(market_id)
+            enabled = False
+        self._set("disabled_markets", sorted(disabled))
         return enabled
 
     def _add_term(self, table: str, term: str) -> bool:

@@ -21,7 +21,16 @@ EBAY_MARKETS = {
     "EBAY_FR": {"name": "eBay Francia", "country": "FR"},
     "EBAY_BE": {"name": "eBay Belgio", "country": "BE"},
     "EBAY_NL": {"name": "eBay Olanda", "country": "NL"},
+    "EBAY_AT": {"name": "eBay Austria", "country": "AT"},
+    "EBAY_ES": {"name": "eBay Spagna", "country": "ES"},
+    "EBAY_PL": {"name": "eBay Polonia", "country": "PL"},
+    "EBAY_IE": {"name": "eBay Irlanda", "country": "IE"},
+    "EBAY_GB": {"name": "eBay Regno Unito", "country": "GB"},
     "EBAY_US": {"name": "eBay USA", "country": "US"},
+    "EBAY_CA": {"name": "eBay Canada", "country": "CA"},
+    "EBAY_AU": {"name": "eBay Australia", "country": "AU"},
+    "EBAY_HK": {"name": "eBay Hong Kong", "country": "HK"},
+    "EBAY_SG": {"name": "eBay Singapore", "country": "SG"},
 }
 
 DEFAULT_INTERVAL_SECONDS = 120

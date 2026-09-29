@@ -3,6 +3,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import config
 from storage import Storage
@@ -36,6 +37,26 @@ class SettingsTest(unittest.TestCase):
         self.assertNotIn("EBAY_FR", self.store.enabled_markets)
         self.assertTrue(self.store.toggle_market("EBAY_FR"))
         self.assertIn("EBAY_FR", self.store.enabled_markets)
+
+    def test_new_markets_start_enabled_after_old_selection(self):
+        self.store._set("enabled_markets", ["EBAY_IT", "EBAY_DE", "EBAY_CH", "EBAY_FR", "EBAY_NL", "EBAY_US"])
+        enabled = self.store.enabled_markets
+        self.assertNotIn("EBAY_BE", enabled)
+        for market in ("EBAY_IT", "EBAY_AT", "EBAY_ES", "EBAY_GB", "EBAY_SG"):
+            self.assertIn(market, enabled)
+        self.assertIsNone(self.store.db.execute("SELECT 1 FROM settings WHERE key='enabled_markets'").fetchone())
+        self.assertEqual(self.store._get("disabled_markets", None), ["EBAY_BE"])
+
+    def test_old_selection_with_everything_on_enables_all(self):
+        self.store._set("enabled_markets", ["EBAY_IT", "EBAY_DE", "EBAY_CH", "EBAY_FR", "EBAY_BE", "EBAY_NL", "EBAY_US"])
+        self.assertEqual(self.store.enabled_markets, list(config.EBAY_MARKETS))
+
+    def test_toggled_off_market_stays_off_when_markets_are_added(self):
+        self.store.toggle_market("EBAY_US")
+        with mock.patch.dict(config.EBAY_MARKETS, {"EBAY_XX": {"name": "eBay Nuovo", "country": "XX"}}):
+            enabled = self.store.enabled_markets
+        self.assertNotIn("EBAY_US", enabled)
+        self.assertIn("EBAY_XX", enabled)
 
     def test_enabled_markets_keeps_config_order(self):
         self.store.toggle_market("EBAY_IT")

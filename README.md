@@ -1,6 +1,6 @@
 # Monitor annunci eBay
 
-Controlla eBay Italia, Germania, Svizzera, Francia, Belgio e Olanda tramite la Browse API ufficiale e manda su Telegram i nuovi annunci che contengono le tue parole. Parole, esclusioni, timer e mercati si gestiscono dal bot.
+Controlla 16 mercati eBay (Italia, Germania, Svizzera, Francia, Belgio, Olanda, Austria, Spagna, Polonia, Irlanda, Regno Unito, USA, Canada, Australia, Hong Kong e Singapore) tramite la Browse API ufficiale e manda su Telegram i nuovi annunci che contengono le tue parole. Parole, esclusioni, timer e mercati si gestiscono dal bot.
 
 ## Dashboard
 
@@ -16,7 +16,7 @@ Metti nel file `.env` l'indirizzo pubblico del server (su Railway è il dominio 
 
 ## Il limite di eBay
 
-eBay concede 5000 ricerche al giorno. Ogni ciclo fa una ricerca per mercato (le parole vengono raggruppate in una sola ricerca, fino a 5 per volta). Con 6 mercati il ciclo più veloce sostenibile è circa ogni 2 minuti. Se imposti un timer più corto il programma usa comunque il minimo sostenibile e te lo dice in /timer. Per andare più veloce: disattiva mercati che non ti servono, oppure chiedi più quota a eBay con l'Application Growth Check (gratuito).
+eBay concede 5000 ricerche al giorno. Ogni ciclo fa una ricerca per mercato (le parole vengono raggruppate in una sola ricerca, fino a 5 per volta). Con tutti i 16 mercati attivi il ciclo più veloce sostenibile è circa ogni 5 minuti; con 7 mercati circa ogni 2 minuti e un quarto. I mercati aggiunti in futuro partono accesi, quelli che hai spento restano spenti. Se imposti un timer più corto il programma usa comunque il minimo sostenibile e te lo dice in /timer. Per andare più veloce: disattiva mercati che non ti servono, oppure chiedi più quota a eBay con l'Application Growth Check (gratuito).
 
 ## Impostazioni avanzate
 
