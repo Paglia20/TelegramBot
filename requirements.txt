@@ -1,4 +1,4 @@
-# Dependencies for bot + scanner
-python-telegram-bot
-python-dotenv
-requests
+python-telegram-bot[rate-limiter]>=21.6,<23
+python-dotenv>=1.0
+starlette>=1.0,<2
+uvicorn>=0.29,<1
