@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monitor annunci</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a78d6'/%3E%3Ccircle cx='14' cy='14' r='6' fill='none' stroke='white' stroke-width='3'/%3E%3Cpath d='M18.5 18.5l5 5' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f4f4f2;
+  --surface: #fcfcfb;
+  --surface-2: #f0efec;
+  --border: #e4e3de;
+  --text: #0b0b0b;
+  --text-2: #52514e;
+  --muted: #7d7c77;
+  --accent: #2a78d6;
+  --accent-hover: #256abf;
+  --accent-weak: #cde2fb;
+  --accent-text: #1c5cab;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --good-text: #006300;
+  --warning-text: #7a5000;
+  --serious-text: #a3421b;
+  --critical-text: #b02a2a;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110;
+    --surface: #1a1a19;
+    --surface-2: #242422;
+    --border: #2f2f2c;
+    --text: #ffffff;
+    --text-2: #c3c2b7;
+    --muted: #8f8e86;
+    --accent: #3987e5;
+    --accent-hover: #5598e7;
+    --accent-weak: #184f95;
+    --accent-text: #86b6ef;
+    --good-text: #5fcf5f;
+    --warning-text: #fab219;
+    --serious-text: #ec835a;
+    --critical-text: #ee7b7b;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110;
+  --surface: #1a1a19;
+  --surface-2: #242422;
+  --border: #2f2f2c;
+  --text: #ffffff;
+  --text-2: #c3c2b7;
+  --muted: #8f8e86;
+  --accent: #3987e5;
+  --accent-hover: #5598e7;
+  --accent-weak: #184f95;
+  --accent-text: #86b6ef;
+  --good-text: #5fcf5f;
+  --warning-text: #fab219;
+  --serious-text: #ec835a;
+  --critical-text: #ee7b7b;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+button, input { font: inherit; color: inherit; }
+a { color: var(--accent-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 0 24px 48px; }
+
+.top {
+  position: sticky; top: 0; z-index: 5;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(1.4) blur(12px);
+  -webkit-backdrop-filter: saturate(1.4) blur(12px);
+  border-bottom: 1px solid var(--border);
+}
+.top-inner { max-width: 1240px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 15px; letter-spacing: -0.01em; }
+.brand svg { flex: none; }
+.env { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 5px; border: 1px solid var(--border); color: var(--text-2); }
+.env.sandbox { border-color: var(--warning); color: var(--warning-text); }
+.spacer { flex: 1; }
+.updated { color: var(--muted); font-size: 12px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 8px; border-radius: 999px; font-size: 13px; font-weight: 550; }
+.pill svg { width: 15px; height: 15px; flex: none; }
+.pill.good { background: color-mix(in srgb, var(--good) 13%, transparent); color: var(--good-text); }
+.pill.warning { background: color-mix(in srgb, var(--warning) 18%, transparent); color: var(--warning-text); }
+.pill.serious { background: color-mix(in srgb, var(--serious) 16%, transparent); color: var(--serious-text); }
+.pill.critical { background: color-mix(in srgb, var(--critical) 14%, transparent); color: var(--critical-text); }
+.pill.neutral { background: var(--surface-2); color: var(--text-2); }
+
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-weight: 550; font-size: 13px; transition: background .12s, border-color .12s; white-space: nowrap; }
+.btn:hover { background: var(--surface-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn svg { width: 15px; height: 15px; }
+.btn:focus-visible, .input:focus-visible, .seg button:focus-visible, .switch:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.summary { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 2fr); gap: 16px; margin-top: 24px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.card-pad { padding: 20px; }
+.label { color: var(--text-2); font-size: 13px; font-weight: 500; }
+.hero-value { font-size: 52px; font-weight: 650; letter-spacing: -0.03em; line-height: 1.05; margin: 10px 0 2px; }
+.hero-value .of { font-size: 20px; font-weight: 500; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+.meter { height: 8px; border-radius: 999px; background: var(--accent-weak); overflow: hidden; margin: 16px 0 12px; }
+.meter > div { height: 100%; border-radius: 999px; background: var(--accent); width: 0; transition: width .4s ease; }
+.meter.warn > div { background: var(--warning); }
+.meter.crit > div { background: var(--critical); }
+.sub { color: var(--muted); font-size: 12.5px; }
+.sub + .sub { margin-top: 3px; }
+
+.tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.tile { padding: 18px 20px; display: flex; flex-direction: column; gap: 4px; min-height: 108px; }
+.tile .value { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.15; margin-top: 6px; }
+.tile .value small { font-size: 14px; color: var(--muted); font-weight: 500; letter-spacing: 0; }
+
+.columns { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; }
+.stack { display: grid; gap: 16px; min-width: 0; }
+.stack > *, .tiles > * { min-width: 0; }
+.card-head { display: flex; align-items: center; gap: 10px; padding: 16px 20px 12px; }
+.card-head h2 { margin: 0; font-size: 14px; font-weight: 650; letter-spacing: -0.005em; }
+.card-head .count { color: var(--muted); font-size: 12.5px; }
+.card-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.card-body { padding: 0 20px 18px; }
+.empty { color: var(--muted); font-size: 13px; padding: 10px 0 4px; }
+
+.rows { list-style: none; margin: 0; padding: 0; }
+.rows > li { display: flex; align-items: center; gap: 12px; padding: 11px 0; border-top: 1px solid var(--border); min-width: 0; }
+.rows > li:first-child { border-top: 0; }
+
+.market-name { font-weight: 550; }
+.market-code { color: var(--muted); font-size: 12px; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.market-main { flex: 1; min-width: 0; }
+.market-state { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); margin-top: 2px; }
+.market-state svg { width: 14px; height: 14px; flex: none; }
+.market-err { color: var(--critical-text); font-size: 12px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-good { color: var(--good-text); } .st-warning { color: var(--warning-text); } .st-serious { color: var(--serious-text); } .st-critical { color: var(--critical-text); } .st-neutral { color: var(--muted); }
+
+.switch { position: relative; width: 36px; height: 21px; border-radius: 999px; border: 0; background: var(--border); cursor: pointer; flex: none; transition: background .15s; padding: 0; }
+.switch::after { content: ""; position: absolute; top: 2.5px; left: 2.5px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s; }
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(15px); }
+.switch:disabled { opacity: .5; cursor: default; }
+
+.add { display: flex; gap: 8px; margin-bottom: 12px; }
+.input { flex: 1; min-width: 0; height: 34px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); outline: none; }
+.input::placeholder { color: var(--muted); }
+.input:focus { border-color: var(--accent); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 13px; max-width: 100%; }
+.chip .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.chip .n { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.icon-btn { width: 22px; height: 22px; border-radius: 50%; border: 0; background: transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--muted); flex: none; }
+.icon-btn:hover { background: var(--border); color: var(--text); }
+.icon-btn svg { width: 12px; height: 12px; }
+
+.seg { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.seg button { height: 32px; padding: 0 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); cursor: pointer; font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.seg button:hover { background: var(--surface-2); }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.timer-row { display: flex; gap: 8px; margin-top: 12px; align-items: center; }
+.timer-row .input { max-width: 120px; flex: none; }
+.timer-facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.fact .k { color: var(--muted); font-size: 12px; }
+.fact .v { font-weight: 600; font-size: 15px; margin-top: 2px; }
+.note { margin-top: 12px; font-size: 12.5px; padding: 10px 12px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning-text); display: flex; gap: 8px; }
+.note svg { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+
+.item-thumb { width: 52px; height: 52px; border-radius: var(--radius-sm); background: var(--surface-2); flex: none; object-fit: cover; border: 1px solid var(--border); }
+.item-main { flex: 1; min-width: 0; }
+.item-title { font-weight: 550; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.item-meta { color: var(--muted); font-size: 12.5px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-price { font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; text-align: right; }
+.item-time { color: var(--muted); font-size: 12px; text-align: right; margin-top: 3px; white-space: nowrap; }
+.kw-tag { display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--surface-2); color: var(--text-2); font-size: 11.5px; font-weight: 550; margin-right: 6px; }
+
+.events { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 12px; max-height: 340px; overflow: auto; }
+.events li { display: grid; grid-template-columns: 62px 16px 1fr; gap: 8px; padding: 5px 0; border-top: 1px solid var(--border); align-items: start; }
+.events li:first-child { border-top: 0; }
+.events .time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.events .lvl svg { width: 13px; height: 13px; margin-top: 2px; }
+.events .msg { color: var(--text-2); word-break: break-word; }
+.events li.warn .msg { color: var(--warning-text); }
+.events li.err .msg { color: var(--critical-text); }
+.filter { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 12.5px; cursor: pointer; user-select: none; }
+.filter input { accent-color: var(--accent); margin: 0; }
+
+.offline .summary, .offline .columns { opacity: .55; pointer-events: none; }
+.banner { display: none; margin-top: 20px; padding: 12px 16px; border-radius: var(--radius); background: color-mix(in srgb, var(--critical) 12%, transparent); color: var(--critical-text); font-weight: 500; align-items: center; gap: 10px; }
+.banner svg { width: 18px; height: 18px; flex: none; }
+.offline .banner { display: flex; }
+
+.toast { position: fixed; bottom: 20px; right: 20px; max-width: 360px; padding: 11px 14px; border-radius: var(--radius-sm); background: var(--text); color: var(--bg); font-size: 13px; box-shadow: 0 8px 24px rgba(0,0,0,.18); transform: translateY(12px); opacity: 0; transition: .2s; pointer-events: none; z-index: 20; }
+.toast.show { transform: none; opacity: 1; }
+.toast.err { background: var(--critical); color: #fff; }
+
+.skeleton { color: transparent !important; background: var(--surface-2); border-radius: 6px; }
+
+@media (max-width: 980px) {
+  .summary, .columns { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .wrap, .top-inner { padding-left: 16px; padding-right: 16px; }
+  .tiles { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tile { padding: 14px; min-height: 96px; }
+  .tile .value { font-size: 22px; }
+  .hero-value { font-size: 44px; }
+  .updated { display: none; }
+  .item-thumb { width: 44px; height: 44px; }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--accent)"/><circle cx="14" cy="14" r="6" fill="none" stroke="#fff" stroke-width="3"/><path d="M18.5 18.5l5 5" stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>
+      <span>Monitor annunci</span>
+      <span class="env" id="env">...</span>
+    </div>
+    <span class="pill neutral" id="status"><span>Connessione...</span></span>
+    <div class="spacer"></div>
+    <span class="updated" id="updated"></span>
+    <button class="btn" id="btn-run" type="button">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9"/><path d="M13.5 2.5v3h-3"/></svg>
+      Controlla ora
+    </button>
+    <button class="btn primary" id="btn-pause" type="button">Pausa</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="banner" role="alert">
+    <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M10 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17Zm0 4a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0v-4a1 1 0 0 1 1-1Zm0 9.2a1.2 1.2 0 1 1 0-2.4 1.2 1.2 0 0 1 0 2.4Z"/></svg>
+    <span id="banner-text">Il bot non risponde. Controlla che sia in esecuzione: la pagina si riconnette da sola.</span>
+  </div>
+
+  <section class="summary">
+    <div class="card card-pad" aria-labelledby="quota-label">
+      <div class="label" id="quota-label">Chiamate eBay rimaste oggi</div>
+      <div class="hero-value"><span id="q-remaining">0</span><span class="of" id="q-limit">/ 0</span></div>
+      <div class="meter" id="q-meter" role="meter" aria-labelledby="quota-label" aria-valuemin="0"><div></div></div>
+      <div class="sub" id="q-reset"></div>
+      <div class="sub" id="q-forecast"></div>
+    </div>
+    <div class="tiles">
+      <div class="card tile">
+        <div class="label">Prossimo controllo</div>
+        <div class="value" id="t-next">...</div>
+        <div class="sub" id="t-next-sub"></div>
+      </div>
+      <div class="card tile">
+        <div class="label">Annunci notificati oggi</div>
+        <div class="value" id="t-today">0</div>
+        <div class="sub" id="t-today-sub"></div>
+      </div>
+      <div class="card tile">
+        <div class="label">Doppioni evitati oggi</div>
+        <div class="value" id="t-dups">0</div>
+        <div class="sub">stesso annuncio su più mercati</div>
+      </div>
+      <div class="card tile">
+        <div class="label">Ultimo ciclo</div>
+        <div class="value" id="t-cycle">...</div>
+        <div class="sub" id="t-cycle-sub"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="columns">
+    <div class="stack">
+      <section class="card">
+        <div class="card-head"><h2>Mercati</h2><span class="count" id="m-count"></span></div>
+        <div class="card-body"><ul class="rows" id="markets"></ul></div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Ultimi annunci notificati</h2><span class="count" id="r-count"></span></div>
+        <div class="card-body"><ul class="rows" id="recent"></ul></div>
+      </section>
+    </div>
+    <div class="stack">
+      <section class="card">
+        <div class="card-head"><h2>Parole monitorate</h2><span class="count" id="k-count"></span></div>
+        <div class="card-body">
+          <form class="add" id="k-form" autocomplete="off">
+            <input class="input" id="k-input" placeholder="Aggiungi, separa con la virgola" aria-label="Nuove parole da monitorare" maxlength="400">
+            <button class="btn primary" type="submit">Aggiungi</button>
+          </form>
+          <div class="chips" id="keywords"></div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Parole escluse</h2><span class="count" id="e-count"></span></div>
+        <div class="card-body">
+          <form class="add" id="e-form" autocomplete="off">
+            <input class="input" id="e-input" placeholder="Es. cover, custodia, rotto" aria-label="Nuove parole da escludere" maxlength="400">
+            <button class="btn" type="submit">Escludi</button>
+          </form>
+          <div class="chips" id="excludes"></div>
+          <div class="sub" style="margin-top:12px">Un annuncio con una di queste parole nel titolo viene ignorato. Il confronto è per parola intera.</div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Frequenza di controllo</h2></div>
+        <div class="card-body">
+          <div class="seg" id="presets" role="group" aria-label="Intervallo"></div>
+          <form class="timer-row" id="t-form">
+            <input class="input" id="t-input" type="number" inputmode="numeric" aria-label="Secondi personalizzati">
+            <span class="sub">secondi</span>
+            <button class="btn" type="submit">Imposta</button>
+          </form>
+          <div class="timer-facts">
+            <div class="fact"><div class="k">Effettivo</div><div class="v" id="f-eff">...</div></div>
+            <div class="fact"><div class="k">Minimo</div><div class="v" id="f-min">...</div></div>
+            <div class="fact"><div class="k">Chiamate a ciclo</div><div class="v" id="f-calls">...</div></div>
+          </div>
+          <div id="t-note"></div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>Eventi</h2>
+          <div class="right"><label class="filter"><input type="checkbox" id="ev-filter"> Solo avvisi ed errori</label></div>
+        </div>
+        <div class="card-body"><ul class="events" id="events"></ul></div>
+      </section>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(() => {
+  const POLL_MS = 5000;
+  const ICONS = {
+    good: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm3.3 5.2-3.8 4.2a.8.8 0 0 1-1.2 0L4.7 8.8a.8.8 0 1 1 1.1-1.1l1.1 1.1 3.2-3.6a.8.8 0 0 1 1.2 1Z"/></svg>',
+    warning: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M7 1.9a1.2 1.2 0 0 1 2 0l6.2 10.8A1.2 1.2 0 0 1 14.2 14.5H1.8a1.2 1.2 0 0 1-1-1.8L7 1.9ZM8 5.3a.8.8 0 0 0-.8.8v3a.8.8 0 0 0 1.6 0v-3a.8.8 0 0 0-.8-.8Zm0 7.3a.9.9 0 1 0 0-1.8.9.9 0 0 0 0 1.8Z"/></svg>',
+    serious: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm0 3.2a.8.8 0 0 1 .8.8v3.4a.8.8 0 0 1-1.6 0V5a.8.8 0 0 1 .8-.8Zm0 8.2a.9.9 0 1 1 0-1.8.9.9 0 0 1 0 1.8Z"/></svg>',
+    critical: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1Zm2.7 8.6a.8.8 0 1 1-1.1 1.1L8 9.1l-1.6 1.6a.8.8 0 1 1-1.1-1.1L6.9 8 5.3 6.4a.8.8 0 1 1 1.1-1.1L8 6.9l1.6-1.6a.8.8 0 1 1 1.1 1.1L9.1 8l1.6 1.6Z"/></svg>',
+    neutral: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="8" cy="8" r="3.5"/></svg>',
+    pause: '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1ZM6.3 5.2c.5 0 .8.3.8.8v4a.8.8 0 0 1-1.6 0V6c0-.5.4-.8.8-.8Zm3.4 0c.4 0 .8.3.8.8v4a.8.8 0 0 1-1.6 0V6c0-.5.3-.8.8-.8Z"/></svg>',
+    close: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6"/></svg>',
+  };
+  const $ = (id) => document.getElementById(id);
+  const nf = new Intl.NumberFormat('it-IT');
+  let state = null, clockOffset = 0, busy = false, lastOk = 0;
+
+  function el(tag, props = {}, ...children) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') node.className = v;
+      else if (k === 'text') node.textContent = v;
+      else if (k === 'html') node.innerHTML = v;
+      else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+      else node.setAttribute(k, v === true ? '' : v);
+    }
+    for (const c of children.flat()) if (c != null) node.append(c instanceof Node ? c : document.createTextNode(c));
+    return node;
+  }
+  const serverNow = () => Date.now() / 1000 + clockOffset;
+  const hhmm = (ts) => new Date(ts * 1000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  const hhmmss = (ts) => new Date(ts * 1000).toLocaleTimeString('it-IT');
+  function when(ts) {
+    const d = new Date(ts * 1000), now = new Date();
+    return d.toDateString() === now.toDateString() ? hhmm(ts)
+      : d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) + ' ' + hhmm(ts);
+  }
+  function ago(ts) {
+    const s = Math.max(0, serverNow() - ts);
+    if (s < 45) return 'adesso';
+    if (s < 3600) return Math.round(s / 60) + ' min fa';
+    if (s < 86400) return Math.round(s / 3600) + ' h fa';
+    return when(ts);
+  }
+  function dur(sec) {
+    sec = Math.round(sec);
+    if (sec < 120) return sec + ' s';
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return s ? `${m} min ${s} s` : `${m} min`;
+  }
+  function money(v, cur) {
+    if (v == null) return 'n.d.';
+    try { return new Intl.NumberFormat('it-IT', { style: 'currency', currency: cur || 'EUR' }).format(v); }
+    catch { return nf.format(v) + ' ' + (cur || ''); }
+  }
+  function safeUrl(u) {
+    try { const x = new URL(u); return x.protocol === 'https:' ? x.href : null; } catch { return null; }
+  }
+  function thumb(u) { return u ? u.replace(/\/s-l\d+\./, '/s-l140.') : null; }
+
+  let toastTimer;
+  function toast(msg, isErr) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show' + (isErr ? ' err' : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.className = 'toast'; }, 3200);
+  }
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'X-Dashboard': '1' },
+      body: JSON.stringify(body || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401) { refresh(); throw new Error('Accesso scaduto: chiedi un nuovo link con /dashboard'); }
+    if (!res.ok) throw new Error(data.error || ('Errore ' + res.status));
+    return data;
+  }
+  async function act(fn, okMsg) {
+    if (busy) return;
+    busy = true;
+    try {
+      const r = await fn();
+      if (okMsg) toast(typeof okMsg === 'function' ? okMsg(r) : okMsg);
+      await refresh();
+    } catch (e) {
+      toast(e.message || 'Operazione non riuscita', true);
+    } finally { busy = false; }
+  }
+
+  function overall(s) {
+    if (s.missing_credentials) return ['serious', 'Credenziali eBay mancanti'];
+    if (s.paused) return ['warning', 'In pausa', 'pause'];
+    if (s.quota.paused_until && s.quota.paused_until > s.now) return ['serious', 'Quota eBay esaurita'];
+    const on = s.markets.filter(m => m.enabled);
+    if (!on.length) return ['warning', 'Nessun mercato attivo'];
+    if (!s.keywords.length) return ['warning', 'Nessuna parola da monitorare'];
+    const bad = on.filter(m => m.state === 'error').length;
+    if (bad === on.length) return ['critical', 'Tutti i mercati in errore'];
+    if (bad) return ['warning', `Attivo, ${bad} ${bad === 1 ? 'mercato' : 'mercati'} in errore`];
+    return ['good', 'Attivo'];
+  }
+  function setPill(node, tone, text, icon) {
+    node.className = 'pill ' + tone;
+    node.replaceChildren(el('span', { html: ICONS[icon || tone] }), el('span', { text }));
+  }
+
+  function renderHeader(s) {
+    const env = $('env');
+    env.textContent = s.sandbox ? 'SANDBOX' : 'PRODUCTION';
+    env.className = 'env' + (s.sandbox ? ' sandbox' : '');
+    const [tone, text, icon] = overall(s);
+    setPill($('status'), tone, text, icon);
+    document.title = (tone === 'good' ? '' : '(!) ') + 'Monitor annunci';
+    $('updated').textContent = 'Aggiornato alle ' + hhmmss(s.now);
+    const p = $('btn-pause');
+    p.textContent = s.paused ? 'Riprendi' : 'Pausa';
+    p.className = 'btn' + (s.paused ? ' primary' : '');
+    p.disabled = false;
+    $('btn-run').disabled = s.paused || s.missing_credentials || s.in_cycle;
+  }
+
+  function renderQuota(s) {
+    const q = s.quota;
+    const remaining = Math.max(0, q.remaining ?? 0), limit = q.limit || 1;
+    $('q-remaining').textContent = nf.format(remaining);
+    $('q-limit').textContent = '/ ' + nf.format(limit);
+    const pct = Math.min(100, Math.max(0, remaining / limit * 100));
+    const meter = $('q-meter');
+    meter.firstElementChild.style.width = pct + '%';
+    meter.className = 'meter' + (pct < 5 ? ' crit' : pct < 20 ? ' warn' : '');
+    meter.setAttribute('aria-valuemax', limit);
+    meter.setAttribute('aria-valuenow', remaining);
+    const parts = [];
+    if (q.reset) parts.push('Si azzera alle ' + when(q.reset));
+    parts.push(q.source === 'eBay' ? `dato eBay delle ${hhmm(q.fetched_at)}` : 'stima dal conteggio locale');
+    $('q-reset').textContent = parts.join(' · ');
+    const f = s.interval.daily_forecast;
+    $('q-forecast').textContent = `Consumo previsto ${nf.format(f)} al giorno con ${s.interval.calls_per_cycle} chiamate ogni ${dur(s.interval.effective)}`;
+  }
+
+  function renderTiles(s) {
+    const st = s.stats, lc = s.last_cycle;
+    $('t-today').textContent = nf.format(st.notified_today);
+    $('t-today-sub').textContent = `${nf.format(st.notified_total)} in totale · ${nf.format(st.seen_total)} nello storico`;
+    $('t-dups').textContent = nf.format(st.duplicates_today);
+    if (!lc.started_at) {
+      $('t-cycle').textContent = 'Nessuno';
+      $('t-cycle-sub').textContent = 'in attesa del primo controllo';
+    } else if (lc.skipped_reason) {
+      $('t-cycle').replaceChildren('Saltato');
+      $('t-cycle-sub').textContent = lc.skipped_reason + ' · ' + hhmm(lc.started_at);
+    } else {
+      $('t-cycle').replaceChildren(lc.duration.toLocaleString('it-IT', { maximumFractionDigits: 1 }), el('small', { text: ' s' }));
+      $('t-cycle-sub').textContent = `${nf.format(lc.fetched)} letti · ${lc.matched} corrispondenze · ${lc.requests} chiamate · ${hhmm(lc.started_at)}`;
+    }
+    tick();
+  }
+
+  function tick() {
+    if (!state) return;
+    if (document.body.classList.contains('offline')) { $('t-next').textContent = 'n.d.'; return; }
+    const s = state, node = $('t-next'), sub = $('t-next-sub');
+    sub.textContent = s.interval.effective > s.interval.requested
+      ? `ogni ${dur(s.interval.effective)} (impostato ${dur(s.interval.requested)})`
+      : `ogni ${dur(s.interval.effective)}`;
+    if (s.paused) { node.textContent = 'In pausa'; return; }
+    if (s.missing_credentials) { node.textContent = 'Fermo'; return; }
+    if (s.in_cycle || !s.next_cycle_at) { node.textContent = 'In corso'; return; }
+    const left = Math.max(0, Math.round(s.next_cycle_at - serverNow()));
+    node.textContent = left === 0 ? 'In corso' : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  }
+
+  const MARKET_STATE = {
+    ok: ['good', 'Funziona'], error: ['critical', 'Errore'], waiting: ['neutral', 'In attesa del primo controllo'],
+    disabled: ['neutral', 'Disattivato'], quota: ['serious', 'In pausa per quota'], unavailable: ['serious', 'Credenziali mancanti'],
+  };
+  function renderMarkets(s) {
+    const on = s.markets.filter(m => m.enabled).length;
+    $('m-count').textContent = `${on} di ${s.markets.length} attivi`;
+    $('markets').replaceChildren(...s.markets.map(m => {
+      const [tone, label] = MARKET_STATE[m.state] || ['neutral', m.state];
+      let detail = label;
+      if (m.state === 'ok' && m.last_ok) detail += ' · ultimo controllo ' + hhmm(m.last_ok);
+      if (m.state === 'ok' && m.last_requests > 1) detail += ` · ${m.last_requests} chiamate`;
+      if (m.state === 'error') detail += ` ${m.failures} volte di fila` + (m.next_try ? ' · riprova alle ' + hhmm(m.next_try) : '');
+      const sw = el('button', {
+        class: 'switch', role: 'switch', 'aria-checked': String(m.enabled), 'aria-label': `${m.enabled ? 'Disattiva' : 'Attiva'} ${m.name}`,
+        onclick: () => act(() => api('POST', '/api/markets/' + m.id, { enabled: !m.enabled }), `${m.name} ${m.enabled ? 'disattivato' : 'attivato'}`),
+      });
+      return el('li', {},
+        el('div', { class: 'market-main' },
+          el('div', {}, el('span', { class: 'market-name', text: m.name }), el('span', { class: 'market-code', text: m.id })),
+          el('div', { class: 'market-state st-' + tone }, el('span', { html: ICONS[tone] }), el('span', { text: detail })),
+          m.state === 'error' && m.last_error ? el('div', { class: 'market-err', title: m.last_error, text: m.last_error }) : null),
+        sw);
+    }));
+  }
+
+  function renderKeywords(s) {
+    $('k-count').textContent = s.keywords.length ? String(s.keywords.length) : '';
+    const box = $('keywords');
+    if (!s.keywords.length) { box.replaceChildren(el('div', { class: 'empty', text: 'Nessuna parola. Aggiungine una per iniziare.' })); return; }
+    box.replaceChildren(...s.keywords.map(k => el('span', { class: 'chip', title: 'Aggiunta il ' + when(k.created_at) },
+      el('span', { class: 't', text: k.term }),
+      el('span', { class: 'n', text: String(k.notified), title: 'annunci notificati' }),
+      el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Rimuovi ' + k.term, html: ICONS.close,
+        onclick: () => act(() => api('DELETE', '/api/keywords/' + k.id), `Rimossa: ${k.term}`) }))));
+  }
+  function renderExcludes(s) {
+    $('e-count').textContent = s.excludes.length ? String(s.excludes.length) : '';
+    const box = $('excludes');
+    if (!s.excludes.length) { box.replaceChildren(el('div', { class: 'empty', text: 'Nessuna esclusione.' })); return; }
+    box.replaceChildren(...s.excludes.map(x => el('span', { class: 'chip' },
+      el('span', { class: 't', text: x.term }),
+      el('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Togli esclusione ' + x.term, html: ICONS.close,
+        onclick: () => act(() => api('DELETE', '/api/excludes/' + x.id), `Non più esclusa: ${x.term}`) }))));
+  }
+
+  function renderTimer(s) {
+    const iv = s.interval;
+    $('presets').replaceChildren(...iv.presets.map(sec => el('button', {
+      type: 'button', 'aria-pressed': String(iv.requested === sec), text: dur(sec),
+      onclick: () => act(() => api('POST', '/api/interval', { seconds: sec }), 'Timer impostato a ' + dur(sec)),
+    })));
+    const inp = $('t-input');
+    inp.min = iv.min; inp.max = iv.max;
+    if (document.activeElement !== inp) inp.placeholder = String(iv.requested);
+    $('f-eff').textContent = dur(iv.effective);
+    $('f-min').textContent = iv.min_sustainable ? dur(iv.min_sustainable) : 'n.d.';
+    $('f-calls').textContent = String(iv.calls_per_cycle);
+    const note = $('t-note');
+    if (iv.effective > iv.requested && iv.min_sustainable >= iv.requested) {
+      note.replaceChildren(el('div', { class: 'note' }, el('span', { html: ICONS.warning }),
+        el('span', { text: `Con ${iv.calls_per_cycle} chiamate per ciclo il limite giornaliero di eBay non basta per ${dur(iv.requested)}: il bot usa ${dur(iv.effective)}. Per scendere disattiva qualche mercato o chiedi più quota a eBay.` })));
+    } else note.replaceChildren();
+  }
+
+  function renderRecent(s) {
+    $('r-count').textContent = s.recent.length ? `ultimi ${s.recent.length}` : '';
+    const list = $('recent');
+    if (!s.recent.length) { list.replaceChildren(el('li', {}, el('div', { class: 'empty', text: 'Ancora nessun annuncio. Arrivano solo quelli pubblicati dopo che hai aggiunto la parola.' }))); return; }
+    list.replaceChildren(...s.recent.map(r => {
+      const url = safeUrl(r.url), img = safeUrl(thumb(r.image));
+      const site = r.origin && r.origin !== r.source ? `${r.source_name} (da ${r.origin_name})` : r.source_name;
+      const title = url ? el('a', { class: 'item-title', href: url, target: '_blank', rel: 'noopener noreferrer', title: r.title, text: r.title })
+        : el('span', { class: 'item-title', title: r.title, text: r.title });
+      return el('li', {},
+        img ? el('img', { class: 'item-thumb', src: img, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer',
+          onerror: (ev) => ev.target.replaceWith(el('div', { class: 'item-thumb' })) }) : el('div', { class: 'item-thumb' }),
+        el('div', { class: 'item-main' }, title,
+          el('div', { class: 'item-meta' }, el('span', { class: 'kw-tag', text: r.keyword }), site)),
+        el('div', {}, el('div', { class: 'item-price', text: money(r.price, r.currency) }), el('div', { class: 'item-time', text: ago(r.first_seen) })));
+    }));
+  }
+
+  function renderEvents(s) {
+    const only = $('ev-filter').checked;
+    const evs = s.events.filter(e => !only || e.level === 'WARNING' || e.level === 'ERROR' || e.level === 'CRITICAL');
+    const list = $('events');
+    if (!evs.length) { list.replaceChildren(el('li', {}, el('span'), el('span'), el('span', { class: 'msg', text: only ? 'Nessun avviso. Tutto regolare.' : 'Nessun evento.' }))); return; }
+    list.replaceChildren(...evs.map(e => {
+      const cls = e.level === 'WARNING' ? 'warn' : (e.level === 'INFO' ? '' : 'err');
+      const icon = cls === 'warn' ? ICONS.warning : cls === 'err' ? ICONS.critical : ICONS.neutral;
+      const tone = cls === 'warn' ? 'st-warning' : cls === 'err' ? 'st-critical' : 'st-neutral';
+      return el('li', { class: cls }, el('span', { class: 'time', text: hhmmss(e.ts) }),
+        el('span', { class: 'lvl ' + tone, html: icon, title: e.level }), el('span', { class: 'msg', text: e.msg }));
+    }));
+  }
+
+  function render(s) {
+    renderHeader(s); renderQuota(s); renderTiles(s); renderMarkets(s);
+    renderKeywords(s); renderExcludes(s); renderTimer(s); renderRecent(s); renderEvents(s);
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch('/api/status', { cache: 'no-store' });
+      if (res.status === 401) {
+        document.body.classList.add('offline');
+        setPill($('status'), 'serious', 'Accesso scaduto');
+        $('banner-text').textContent = "L'accesso è scaduto o è stato revocato. Chiedi un nuovo link con /dashboard nel bot Telegram.";
+        $('btn-run').disabled = true; $('btn-pause').disabled = true;
+        return;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const s = await res.json();
+      clockOffset = s.now - Date.now() / 1000;
+      state = s; lastOk = Date.now();
+      document.body.classList.remove('offline');
+      $('banner-text').textContent = 'Il bot non risponde. Controlla che sia in esecuzione: la pagina si riconnette da sola.';
+      render(s);
+    } catch {
+      document.body.classList.add('offline');
+      setPill($('status'), 'critical', 'Bot non raggiungibile');
+      $('btn-run').disabled = true;
+      $('btn-pause').disabled = true;
+      tick();
+      document.title = '(!) Monitor annunci';
+      $('updated').textContent = lastOk ? 'Ultimo dato alle ' + hhmmss(lastOk / 1000) : '';
+    }
+  }
+
+  $('btn-pause').addEventListener('click', () => state && act(
+    () => api('POST', '/api/pause', { paused: !state.paused }), state.paused ? 'Monitoraggio ripreso' : 'Monitoraggio in pausa'));
+  $('btn-run').addEventListener('click', () => act(() => api('POST', '/api/run'), 'Controllo avviato'));
+  $('k-form').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const v = $('k-input').value.trim();
+    if (!v) return;
+    act(() => api('POST', '/api/keywords', { terms: v }), r => {
+      $('k-input').value = '';
+      const parts = [];
+      if (r.added.length) parts.push('Aggiunte: ' + r.added.join(', '));
+      if (r.existing.length) parts.push("Già presenti: " + r.existing.join(', '));
+      return parts.join(' · ') || 'Nessuna parola valida';
+    });
+  });
+  $('e-form').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const v = $('e-input').value.trim();
+    if (!v) return;
+    act(() => api('POST', '/api/excludes', { terms: v }), r => {
+      $('e-input').value = '';
+      return r.added.length ? 'Escluse: ' + r.added.join(', ') : 'Nessuna nuova esclusione';
+    });
+  });
+  $('t-form').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const v = parseInt($('t-input').value, 10);
+    if (!Number.isFinite(v)) { toast('Scrivi un numero di secondi', true); return; }
+    act(() => api('POST', '/api/interval', { seconds: v }), r => { $('t-input').value = ''; return 'Timer impostato a ' + dur(r.interval); });
+  });
+  $('ev-filter').addEventListener('change', () => state && renderEvents(state));
+
+  refresh();
+  setInterval(refresh, POLL_MS);
+  setInterval(tick, 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+})();
+</script>
+</body>
+</html>
