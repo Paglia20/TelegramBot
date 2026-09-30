@@ -306,6 +306,62 @@ class PauseAndStopTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(notifier.sent), 5)
         self.assertEqual(len({i.item_key for i, _, _ in notifier.sent}), 5)
 
+    async def test_exclusion_added_while_sending_blocks_the_rest(self):
+        store = self.store
+
+        class ExcludingNotifier(FakeNotifier):
+            async def send_listing(self, item, keyword, old_price=None):
+                ok = await super().send_listing(item, keyword, old_price)
+                store.add_exclude("modellino")
+                return ok
+
+        listings = [make_listing("1", "Ferrari F40", seller="a"),
+                    make_listing("2", "Ferrari modellino 1:18", seller="b"),
+                    make_listing("3", "Ferrari 360 Modena", seller="c"),
+                    make_listing("4", "Modellino Ferrari Enzo", seller="d")]
+        notifier = ExcludingNotifier()
+        await Monitor(store, notifier, {"EBAY_IT": FakeSource("EBAY_IT", listings)}).run_cycle()
+        self.assertEqual([i.item_key for i, _, _ in notifier.sent], ["ebay:1", "ebay:3"])
+        self.assertIsNone(store.get_seen("ebay:2"))
+        self.assertIsNone(store.get_seen("ebay:4"))
+
+    async def test_keyword_removed_while_sending_blocks_the_rest(self):
+        store = self.store
+
+        class RemovingNotifier(FakeNotifier):
+            async def send_listing(self, item, keyword, old_price=None):
+                ok = await super().send_listing(item, keyword, old_price)
+                store.remove_keyword("Ferrari")
+                return ok
+
+        notifier = RemovingNotifier()
+        await Monitor(store, notifier, {"EBAY_IT": FakeSource("EBAY_IT", self.listings(3))}).run_cycle()
+        self.assertEqual(len(notifier.sent), 1)
+
+    async def test_exclusion_added_during_pause_filters_the_queue(self):
+        store = self.store
+
+        class PausingNotifier(FakeNotifier):
+            async def send_listing(self, item, keyword, old_price=None):
+                ok = await super().send_listing(item, keyword, old_price)
+                store.paused = True
+                return ok
+
+        listings = [make_listing("1", "Ferrari F40", seller="a"),
+                    make_listing("2", "Ferrari modellino", seller="b"),
+                    make_listing("3", "Ferrari 360", seller="c")]
+        notifier = PausingNotifier()
+        src = FakeSource("EBAY_IT", listings)
+        mon = Monitor(store, notifier, {"EBAY_IT": src})
+        await mon.run_cycle()
+        self.assertEqual(len(mon.backlog), 2)
+        store.add_exclude("modellino")
+        store.paused = False
+        src.listings = []
+        notifier.__class__ = FakeNotifier
+        await mon.run_cycle()
+        self.assertEqual([i.item_key for i, _, _ in notifier.sent], ["ebay:1", "ebay:3"])
+
     async def test_request_stop_ends_run_forever_cleanly(self):
         mon = Monitor(self.store, FakeNotifier(), {"EBAY_IT": FakeSource("EBAY_IT")})
         task = asyncio.create_task(mon.run_forever())

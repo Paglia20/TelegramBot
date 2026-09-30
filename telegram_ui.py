@@ -1,17 +1,20 @@
 import hashlib
 import html
+import logging
 import secrets
 import time
 from datetime import datetime
 
 from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
-from telegram.error import BadRequest
+from telegram.error import BadRequest, Forbidden, TelegramError
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
 import config
 from matching import split_terms
 from sources.ebay import get_rate_limits
+
+log = logging.getLogger(__name__)
 
 BTN = InlineKeyboardButton
 BACK = [BTN("Indietro", callback_data="m")]
@@ -265,15 +268,22 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     name = (user.full_name or user.username or str(chat.id)) if user else str(chat.id)
     store.add_user(chat.id, name, inviter)
-    await chat.send_message(
-        "Sei collegato al monitor annunci. Riceverai i nuovi annunci qui e puoi gestire parole, "
-        "esclusioni, mercati e timer. Scrivi /menu quando vuoi."
-    )
-    await cmd_menu(update, ctx)
+    log.info("Nuovo utente collegato con invito: %s (%s)", name, chat.id)
+    notice = f"{name} si è collegato con il tuo link d'invito."
     try:
-        await ctx.bot.send_message(config.TELEGRAM_CHAT_ID, f"{name} si è collegato con il tuo link d'invito.")
-    except Exception:
-        pass
+        await chat.send_message(
+            "Sei collegato al monitor annunci. Riceverai i nuovi annunci qui e puoi gestire parole, "
+            "esclusioni, mercati e timer. Scrivi /menu quando vuoi."
+        )
+        await cmd_menu(update, ctx)
+    except Forbidden:
+        log.warning("%s si è collegato ma ha bloccato il bot", name)
+        notice += (" Però Telegram dice che ha bloccato il bot, quindi per ora non riceve messaggi: "
+                   "deve sbloccarlo e scrivere /menu.")
+    try:
+        await ctx.bot.send_message(config.TELEGRAM_CHAT_ID, notice)
+    except TelegramError as exc:
+        log.warning("Avviso al proprietario non inviato: %s", exc)
 
 
 async def cmd_invita(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -493,7 +503,20 @@ async def cmd_not_configured(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def on_error(update: object, ctx: ContextTypes.DEFAULT_TYPE):
+    err = ctx.error
+    chat = getattr(update, "effective_chat", None)
+    where = f" (chat {chat.id})" if chat is not None else ""
+    if isinstance(err, Forbidden):
+        log.warning("Messaggio non consegnato%s: l'utente ha bloccato il bot", where)
+    elif isinstance(err, TelegramError):
+        log.warning("Errore Telegram%s: %s", where, err)
+    else:
+        log.error("Errore nel bot%s", where, exc_info=err)
+
+
 def register(app: Application):
+    app.add_error_handler(on_error)
     app.add_handler(CommandHandler("id", cmd_id))
     if not config.TELEGRAM_CHAT_ID:
         app.add_handler(MessageHandler(filters.ALL, cmd_not_configured))

@@ -301,12 +301,17 @@ class Monitor:
                         "Se succede spesso, una parola è troppo generica.",
                         len(outbox) + len(self.backlog), len(outbox), len(self.backlog))
 
+        dropped = 0
         for position, (kind, item, kw, extra) in enumerate(outbox):
             if self._halted():
                 self.backlog = (outbox[position:] + self.backlog)[: config.MAX_BACKLOG]
                 log.info("Pausa: %d notifiche non inviate, partiranno quando riprende il monitoraggio",
                          len(outbox) - position)
                 break
+            kw = self._current_matcher().match(item.title)
+            if kw is None:
+                dropped += 1
+                continue
             if kind == "new":
                 if await self.notifier.send_listing(item, kw.term):
                     self.store.insert_seen(item, extra, kw.term)
@@ -315,7 +320,12 @@ class Monitor:
                 if await self.notifier.send_listing(item, kw.term, old_price=extra["price"]):
                     self.store.touch_seen(extra, item, new_price=item.price)
                     stats.notified += 1
+        if dropped:
+            log.info("%d annunci in attesa scartati: parole o esclusioni cambiate durante l'invio", dropped)
         return matches_by_source
+
+    def _current_matcher(self) -> Matcher:
+        return Matcher(self.store.keywords(), [term for _, term in self.store.excludes()])
 
     @staticmethod
     def _is_price_drop(row, item) -> bool:
