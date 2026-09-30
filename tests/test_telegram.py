@@ -1,3 +1,4 @@
+import asyncio
 import importlib.util
 import unittest
 
@@ -16,12 +17,15 @@ if HAS_PTB:
 
 
 class FakeChat:
-    def __init__(self, chat_id=CHAT_ID, chat_type="private"):
+    def __init__(self, chat_id=CHAT_ID, chat_type="private", blocked=False):
         self.id = chat_id
         self.type = chat_type
+        self.blocked = blocked
         self.sent = []
 
     async def send_message(self, text, **kwargs):
+        if self.blocked:
+            raise Forbidden("Forbidden: bot was blocked by the user")
         self.sent.append((text, kwargs))
 
 
@@ -60,9 +64,13 @@ class FakeApp:
     def __init__(self, bot_data):
         self.bot_data = bot_data
         self.handlers = []
+        self.error_handlers = []
 
     def add_handler(self, handler):
         self.handlers.append(handler)
+
+    def add_error_handler(self, handler):
+        self.error_handlers.append(handler)
 
 
 class FakeTelegramBot:
@@ -135,6 +143,16 @@ class NotifierTest(unittest.IsolatedAsyncioTestCase):
         item.images = []
         await notifier.send_listing(item, "x")
         self.assertEqual(bot.calls, [("album", config.MAX_PHOTOS), ("photo", CHAT_ID), ("text", CHAT_ID)])
+
+    async def test_rejected_album_falls_back_to_first_photo(self):
+        class AlbumFails(FakeBot):
+            async def send_media_group(self, chat_id, media):
+                raise BadRequest("Failed to send message #2 with the error message \"webpage_curl_failed\"")
+
+        bot = AlbumFails()
+        ok = await Notifier(bot, lambda: [CHAT_ID]).send_listing(make_listing("1", images=["a", "b", "c"]), "x")
+        self.assertTrue(ok)
+        self.assertEqual(bot.calls, [("photo", CHAT_ID)])
 
     async def test_rejected_photo_falls_back_to_text(self):
         bot = FakeBot(fail_photo=BadRequest("wrong file"))
@@ -264,6 +282,27 @@ class TelegramUiTest(unittest.IsolatedAsyncioTestCase):
         app = FakeApp({"store": self.store})
         ui.register(app)
         self.assertEqual(len(app.handlers), 19)
+        self.assertEqual(app.error_handlers, [ui.on_error])
+
+    async def test_friend_who_blocked_the_bot_is_added_and_owner_is_told(self):
+        code = await self.invite_code()
+        friend = FakeChat(chat_id=99, blocked=True)
+        bot = FakeTelegramBot()
+        await ui.cmd_start(FakeUpdate(friend, user=FakeUser("Mattia")), self.ctx_with_bot(bot, [code]))
+        self.assertTrue(ui.is_authorized(self.store, 99))
+        self.assertEqual(bot.messages[0][0], CHAT_ID)
+        self.assertIn("Mattia si è collegato", bot.messages[0][1])
+        self.assertIn("ha bloccato il bot", bot.messages[0][1])
+
+    async def test_error_handler_never_raises(self):
+        class Ctx:
+            error = None
+
+        ctx = Ctx()
+        for err in (Forbidden("blocked"), BadRequest("bad"), RuntimeError("boom")):
+            ctx.error = err
+            await ui.on_error(FakeUpdate(FakeChat(chat_id=99)), ctx)
+            await ui.on_error(None, ctx)
 
     async def invite_code(self):
         bot = FakeTelegramBot()
@@ -351,6 +390,30 @@ class TelegramUiTest(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(f.filter(Msg(CHAT_ID)))
         self.assertTrue(f.filter(Msg(99)))
         self.assertFalse(f.filter(Msg(100)))
+
+
+@unittest.skipUnless(HAS_PTB, "python-telegram-bot non installato")
+class ShutdownTest(unittest.IsolatedAsyncioTestCase):
+    async def test_on_stop_stops_monitor_and_dashboard_before_the_bot(self):
+        import main
+
+        with patch_config():
+            store = temp_storage()
+            monitor = Monitor(store, FakeNotifier(), {"EBAY_IT": FakeSource("EBAY_IT")})
+            task = asyncio.create_task(monitor.run_forever())
+            await asyncio.sleep(0.1)
+
+            class FakeDashboard:
+                stopped = False
+
+                async def stop(self):
+                    FakeDashboard.stopped = True
+
+            app = FakeApp({"monitor": monitor, "monitor_task": task, "dashboard": FakeDashboard()})
+            await main.on_stop(app)
+            self.assertTrue(task.done())
+            self.assertFalse(task.cancelled())
+            self.assertTrue(FakeDashboard.stopped)
 
 
 if __name__ == "__main__":

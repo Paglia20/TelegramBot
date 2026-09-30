@@ -17,6 +17,7 @@ from storage import Storage
 logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s: %(message)s", level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 log = logging.getLogger("main")
+STOP_TIMEOUT_SECONDS = 20
 EVENTS = EventLog()
 logging.getLogger().addHandler(EVENTS)
 
@@ -59,17 +60,23 @@ async def on_startup(app: Application):
         await notifier.alert(f"monitor avviato{mode}. Scrivi /menu per il pannello di controllo.{dashboard_line}")
 
 
-async def on_shutdown(app: Application):
+async def on_stop(app: Application):
+    monitor = app.bot_data.get("monitor")
+    task = app.bot_data.get("monitor_task")
+    if monitor and task:
+        monitor.request_stop()
+        try:
+            await asyncio.wait_for(task, timeout=STOP_TIMEOUT_SECONDS)
+        except asyncio.TimeoutError:
+            log.warning("Il monitor non si è fermato in %d s, lo interrompo", STOP_TIMEOUT_SECONDS)
+        except asyncio.CancelledError:
+            pass
     dashboard = app.bot_data.get("dashboard")
     if dashboard:
         await dashboard.stop()
-    task = app.bot_data.get("monitor_task")
-    if task:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+
+
+async def on_shutdown(app: Application):
     client = app.bot_data.get("http")
     if client:
         await client.aclose()
@@ -84,6 +91,7 @@ def main():
         .token(config.TELEGRAM_TOKEN)
         .rate_limiter(AIORateLimiter(max_retries=3))
         .post_init(on_startup)
+        .post_stop(on_stop)
         .post_shutdown(on_shutdown)
         .build()
     )

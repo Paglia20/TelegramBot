@@ -254,6 +254,97 @@ class CycleTest(unittest.IsolatedAsyncioTestCase):
             await task
 
 
+class PauseAndStopTest(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.patcher = patch_config()
+        self.patcher.start()
+        self.store = temp_storage()
+        add_old_keyword(self.store, "Ferrari")
+
+    async def asyncTearDown(self):
+        self.patcher.stop()
+
+    def listings(self, n):
+        return [make_listing(str(i), f"Ferrari {i}", seller=f"s{i}") for i in range(n)]
+
+    async def test_pause_during_fetch_sends_nothing(self):
+        store = self.store
+
+        class PausingSource(FakeSource):
+            async def fetch(self, keywords):
+                store.paused = True
+                return await super().fetch(keywords)
+
+        notifier = FakeNotifier()
+        mon = Monitor(store, notifier, {"EBAY_IT": PausingSource("EBAY_IT", self.listings(3))})
+        stats = await mon.run_cycle()
+        self.assertEqual(notifier.sent, [])
+        self.assertIn("pausa", stats.skipped_reason)
+        self.assertEqual(store.api_calls_today(), 1)
+
+    async def test_pause_while_sending_stops_and_resumes_later(self):
+        store = self.store
+
+        class PausingNotifier(FakeNotifier):
+            async def send_listing(self, item, keyword, old_price=None):
+                ok = await super().send_listing(item, keyword, old_price)
+                if len(self.sent) == 2:
+                    store.paused = True
+                return ok
+
+        notifier = PausingNotifier()
+        src = FakeSource("EBAY_IT", self.listings(5))
+        mon = Monitor(store, notifier, {"EBAY_IT": src})
+        await mon.run_cycle()
+        self.assertEqual(len(notifier.sent), 2)
+        self.assertEqual(len(mon.backlog), 3)
+        src.listings = []
+        self.assertEqual((await mon.run_cycle()).skipped_reason, "in pausa")
+        self.assertEqual(len(notifier.sent), 2)
+        store.paused = False
+        await mon.run_cycle()
+        self.assertEqual(len(notifier.sent), 5)
+        self.assertEqual(len({i.item_key for i, _, _ in notifier.sent}), 5)
+
+    async def test_request_stop_ends_run_forever_cleanly(self):
+        mon = Monitor(self.store, FakeNotifier(), {"EBAY_IT": FakeSource("EBAY_IT")})
+        task = asyncio.create_task(mon.run_forever())
+        await asyncio.sleep(0.1)
+        mon.request_stop()
+        await asyncio.wait_for(task, timeout=2)
+        self.assertTrue(task.done())
+        self.assertFalse(task.cancelled())
+
+    async def test_stop_during_sending_keeps_remaining_unsent(self):
+        holder = {}
+
+        class StoppingNotifier(FakeNotifier):
+            async def send_listing(self, item, keyword, old_price=None):
+                ok = await super().send_listing(item, keyword, old_price)
+                holder["mon"].request_stop()
+                return ok
+
+        notifier = StoppingNotifier()
+        mon = Monitor(self.store, notifier, {"EBAY_IT": FakeSource("EBAY_IT", self.listings(4))})
+        holder["mon"] = mon
+        await mon.run_cycle()
+        self.assertEqual(len(notifier.sent), 1)
+        self.assertEqual(self.store.seen_count(), 1)
+
+    async def test_matches_are_counted_per_market(self):
+        it = [make_listing("1", "Ferrari F40", seller="a"), make_listing("2", "Game Boy", seller="b")]
+        de = [make_listing("1", "Ferrari F40", source="EBAY_DE", origin="EBAY_IT", seller="a"),
+              make_listing("3", "Ferrari 360", source="EBAY_DE", seller="c"),
+              make_listing("4", "Ferrari 458", source="EBAY_DE", seller="d")]
+        mon = Monitor(self.store, FakeNotifier(), {"EBAY_IT": FakeSource("EBAY_IT", it),
+                                                   "EBAY_DE": FakeSource("EBAY_DE", de),
+                                                   "EBAY_FR": FakeSource("EBAY_FR", error=SourceError("x"))})
+        await mon.run_cycle()
+        self.assertEqual(mon.health["EBAY_IT"].last_matches, 1)
+        self.assertEqual(mon.health["EBAY_DE"].last_matches, 3)
+        self.assertEqual(mon.health["EBAY_FR"].last_matches, 0)
+
+
 class EndToEndTest(unittest.IsolatedAsyncioTestCase):
     async def test_real_ebay_source_with_fake_api(self):
         with patch_config():

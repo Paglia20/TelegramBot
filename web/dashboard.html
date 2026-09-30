@@ -483,7 +483,12 @@ a:hover { text-decoration: underline; }
     meter.setAttribute('aria-valuenow', remaining);
     const parts = [];
     if (q.reset) parts.push('Si azzera alle ' + when(q.reset));
-    parts.push(q.source === 'eBay' ? `dato eBay delle ${hhmm(q.fetched_at)}` : 'stima dal conteggio locale');
+    if (q.source === 'eBay') {
+      parts.push(`dato eBay delle ${hhmm(q.fetched_at)}` +
+        (q.since_fetch ? `, meno ${q.since_fetch} ${q.since_fetch === 1 ? 'chiamata fatta' : 'chiamate fatte'} dopo` : ''));
+    } else {
+      parts.push('stima dal conteggio locale');
+    }
     $('q-reset').textContent = parts.join(' · ');
     const f = s.interval.daily_forecast;
     $('q-forecast').textContent = `Consumo previsto ${nf.format(f)} al giorno con ${s.interval.calls_per_cycle} chiamate ogni ${dur(s.interval.effective)}`;
@@ -502,7 +507,7 @@ a:hover { text-decoration: underline; }
       $('t-cycle-sub').textContent = lc.skipped_reason + ' · ' + hhmm(lc.started_at);
     } else {
       $('t-cycle').replaceChildren(lc.duration.toLocaleString('it-IT', { maximumFractionDigits: 1 }), el('small', { text: ' s' }));
-      $('t-cycle-sub').textContent = `${nf.format(lc.fetched)} letti · ${lc.matched} corrispondenze · ${lc.requests} chiamate · ${hhmm(lc.started_at)}`;
+      $('t-cycle-sub').textContent = `${nf.format(lc.fetched)} letti · ${lc.matched} ${lc.matched === 1 ? 'riscontro' : 'riscontri'} · ${lc.requests} chiamate · ${hhmm(lc.started_at)}`;
     }
     tick();
   }
@@ -531,6 +536,7 @@ a:hover { text-decoration: underline; }
     $('markets').replaceChildren(...s.markets.map(m => {
       const [tone, label] = MARKET_STATE[m.state] || ['neutral', m.state];
       let detail = label;
+      if (m.state === 'ok') detail += ` · ${m.last_matches} ${m.last_matches === 1 ? 'riscontro' : 'riscontri'}`;
       if (m.state === 'ok' && m.last_ok) detail += ' · ultimo controllo ' + hhmm(m.last_ok);
       if (m.state === 'ok' && m.last_requests > 1) detail += ` · ${m.last_requests} chiamate`;
       if (m.state === 'error') detail += ` ${m.failures} volte di fila` + (m.next_try ? ' · riprova alle ' + hhmm(m.next_try) : '');

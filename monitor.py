@@ -26,6 +26,7 @@ class SourceHealth:
     last_error: str = ""
     last_ok: float = 0.0
     last_requests: int = 0
+    last_matches: int = 0
 
 
 @dataclass
@@ -64,10 +65,18 @@ class Monitor:
         self.started_at = time.time()
         self.next_cycle_at = 0.0
         self.in_cycle = False
+        self._stopping = False
         self.backlog: list = []
 
     def trigger(self):
         self._wake.set()
+
+    def request_stop(self):
+        self._stopping = True
+        self._wake.set()
+
+    def _halted(self) -> bool:
+        return self._stopping or self.store.paused
 
     def active_sources(self) -> list:
         return [self.sources[m] for m in self.store.enabled_markets if m in self.sources]
@@ -92,12 +101,14 @@ class Monitor:
 
     async def run_forever(self):
         log.info("Monitor avviato")
-        while True:
+        while not self._stopping:
             gap = self._last_start + MIN_GAP_BETWEEN_CYCLES - time.monotonic()
             if gap > 0:
                 await asyncio.sleep(gap)
             self._last_start = time.monotonic()
             self.next_cycle_at = 0.0
+            if self._stopping:
+                break
             try:
                 await self.run_cycle()
             except asyncio.CancelledError:
@@ -112,6 +123,7 @@ class Monitor:
             except asyncio.TimeoutError:
                 pass
             self._wake.clear()
+        log.info("Monitor fermato")
 
     async def run_cycle(self) -> CycleStats:
         stats = CycleStats(started_at=time.time())
@@ -126,6 +138,9 @@ class Monitor:
         return stats
 
     async def _cycle(self, stats: CycleStats):
+        if self._stopping:
+            stats.skipped_reason = "spegnimento in corso"
+            return
         if self.store.paused:
             stats.skipped_reason = "in pausa"
             return
@@ -152,8 +167,16 @@ class Monitor:
         listings = [item for batch in results for item in batch]
         stats.fetched = len(listings)
         self.store.add_api_calls(stats.requests)
+        if self._halted():
+            stats.skipped_reason = "messo in pausa durante il controllo: nessuna notifica inviata"
+            log.info("Pausa arrivata durante il controllo: %d annunci letti non notificati", stats.fetched)
+            return
 
-        await self._process(listings, keywords, stats)
+        matches = await self._process(listings, keywords, stats)
+        for src in ready:
+            health = self.health[src.id]
+            if health.failures == 0 and health.last_ok >= stats.started_at:
+                health.last_matches = matches.get(src.id, 0)
 
         if now - self._last_prune > PRUNE_EVERY_SECONDS:
             removed = self.store.prune_seen(config.SEEN_RETENTION_DAYS)
@@ -161,7 +184,7 @@ class Monitor:
             if removed:
                 log.info("Storico: rimossi %d annunci vecchi", removed)
         log.info(
-            "Ciclo: %d mercati, %d annunci letti, %d corrispondenze, %d notificati, %d doppioni, %d chiamate",
+            "Ciclo: %d mercati, %d annunci letti, %d riscontri, %d notificati, %d doppioni, %d chiamate",
             len(ready), stats.fetched, stats.matched, stats.notified, stats.duplicates, stats.requests,
         )
 
@@ -208,6 +231,13 @@ class Monitor:
 
     async def _process(self, listings: list, keywords: list, stats: CycleStats):
         matcher = Matcher(keywords, [term for _, term in self.store.excludes()])
+        by_title: dict = {}
+        matches_by_source: dict = {}
+        for item in listings:
+            if item.title not in by_title:
+                by_title[item.title] = matcher.match(item.title)
+            if by_title[item.title] is not None:
+                matches_by_source[item.source] = matches_by_source.get(item.source, 0) + 1
         best: dict = {}
         for item in listings:
             current = best.get(item.item_key)
@@ -229,7 +259,7 @@ class Monitor:
         outbox = []
 
         for item in ordered:
-            kw = matcher.match(item.title)
+            kw = by_title[item.title]
             if kw is None:
                 continue
             stats.matched += 1
@@ -271,7 +301,12 @@ class Monitor:
                         "Se succede spesso, una parola è troppo generica.",
                         len(outbox) + len(self.backlog), len(outbox), len(self.backlog))
 
-        for kind, item, kw, extra in outbox:
+        for position, (kind, item, kw, extra) in enumerate(outbox):
+            if self._halted():
+                self.backlog = (outbox[position:] + self.backlog)[: config.MAX_BACKLOG]
+                log.info("Pausa: %d notifiche non inviate, partiranno quando riprende il monitoraggio",
+                         len(outbox) - position)
+                break
             if kind == "new":
                 if await self.notifier.send_listing(item, kw.term):
                     self.store.insert_seen(item, extra, kw.term)
@@ -280,6 +315,7 @@ class Monitor:
                 if await self.notifier.send_listing(item, kw.term, old_price=extra["price"]):
                     self.store.touch_seen(extra, item, new_price=item.price)
                     stats.notified += 1
+        return matches_by_source
 
     @staticmethod
     def _is_price_drop(row, item) -> bool:

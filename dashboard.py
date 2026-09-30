@@ -132,6 +132,7 @@ class Dashboard:
         self._login_tokens: dict = {}
         self._quota = None
         self._quota_at = 0.0
+        self._quota_local_used = 0
         self._quota_lock = asyncio.Lock()
         self._server = None
         self._task = None
@@ -323,13 +324,23 @@ class Dashboard:
             self.monitor.trigger()
         return JSONResponse({"ok": True})
 
+    def _quota_stale(self) -> bool:
+        now = time.time()
+        if now - self._quota_at > QUOTA_REFRESH_SECONDS:
+            return True
+        reset = self._quota.get("reset") if self._quota else None
+        return bool(reset) and reset.timestamp() <= now and self._quota_at < reset.timestamp()
+
     async def _quota_info(self):
         if not self.auth:
             return None
         async with self._quota_lock:
-            if time.time() - self._quota_at > QUOTA_REFRESH_SECONDS:
-                self._quota = await get_rate_limits(self.auth)
+            if self._quota_stale():
+                fresh = await get_rate_limits(self.auth)
                 self._quota_at = time.time()
+                if fresh is not None:
+                    self._quota = fresh
+                    self._quota_local_used = self.store.api_calls_today()
         return self._quota
 
     async def status(self) -> dict:
@@ -353,13 +364,15 @@ class Dashboard:
             "paused_until": monitor.quota_pause_until.get("ebay", 0) or None,
         }
         if quota and quota.get("limit") is not None:
+            since_fetch = max(0, local_used - self._quota_local_used)
             quota_out.update(
                 limit=quota["limit"],
-                remaining=quota["remaining"],
-                used=quota.get("count"),
+                remaining=max(0, (quota.get("remaining") or 0) - since_fetch),
+                used=(quota.get("count") or 0) + since_fetch,
                 reset=quota["reset"].timestamp() if quota.get("reset") else None,
                 source="eBay",
                 fetched_at=self._quota_at,
+                since_fetch=since_fetch,
             )
 
         markets = []
@@ -380,7 +393,8 @@ class Dashboard:
             markets.append({
                 "id": mid, "name": info["name"], "country": info["country"], "enabled": mid in enabled,
                 "state": state, "failures": h.failures if h else 0, "last_ok": (h.last_ok or None) if h else None,
-                "last_error": h.last_error if h else "", "last_requests": h.last_requests if h else 0, "next_try": (h.next_try or None) if h and h.failures else None,
+                "last_error": h.last_error if h else "", "last_requests": h.last_requests if h else 0,
+                "last_matches": h.last_matches if h else 0, "next_try": (h.next_try or None) if h and h.failures else None,
             })
 
         counts = store.keyword_counts()

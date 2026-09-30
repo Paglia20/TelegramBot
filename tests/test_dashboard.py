@@ -4,6 +4,7 @@ import signal
 import socket
 import time
 import unittest
+from unittest import mock
 
 from starlette.testclient import TestClient
 
@@ -116,6 +117,69 @@ class LocalAccessTest(DashboardTestCase):
 
     def test_login_disabled_locally(self):
         self.assertEqual(self.client().get("/login?t=x").status_code, 404)
+
+    def test_market_matches_in_status(self):
+        self.monitor.health["EBAY_IT"].last_ok = time.time()
+        self.monitor.health["EBAY_IT"].last_matches = 7
+        markets = {m["id"]: m for m in self.client().get("/api/status").json()["markets"]}
+        self.assertEqual(markets["EBAY_IT"]["last_matches"], 7)
+        self.assertEqual(markets["EBAY_IT"]["state"], "ok")
+
+    def fake_quota(self, remaining=4000, reset=None):
+        calls = []
+
+        async def fake_rate_limits(auth):
+            calls.append(auth)
+            return {"limit": 5000, "remaining": remaining, "count": 5000 - remaining, "reset": reset}
+
+        self.dashboard.auth = object()
+        return calls, mock.patch("dashboard.get_rate_limits", fake_rate_limits)
+
+    def test_quota_is_read_from_ebay_even_while_paused(self):
+        calls, patcher = self.fake_quota()
+        with patcher:
+            self.store.paused = True
+            quota = self.client().get("/api/status").json()["quota"]
+        self.assertEqual(quota["source"], "eBay")
+        self.assertEqual(quota["remaining"], 4000)
+        self.assertEqual(len(calls), 1)
+
+    def test_quota_counts_calls_made_after_the_ebay_reading(self):
+        calls, patcher = self.fake_quota(remaining=4000)
+        with patcher:
+            c = self.client()
+            c.get("/api/status")
+            self.store.add_api_calls(16)
+            quota = c.get("/api/status").json()["quota"]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(quota["remaining"], 3984)
+        self.assertEqual(quota["used"], 1016)
+        self.assertEqual(quota["since_fetch"], 16)
+
+    def test_quota_is_reread_when_the_reset_time_passes(self):
+        from datetime import datetime, timezone
+        past = datetime.fromtimestamp(time.time() + 0.2, tz=timezone.utc)
+        calls, patcher = self.fake_quota(reset=past)
+        with patcher:
+            c = self.client()
+            c.get("/api/status")
+            time.sleep(0.3)
+            c.get("/api/status")
+        self.assertEqual(len(calls), 2)
+
+    def test_failed_quota_reading_keeps_the_last_good_value(self):
+        calls, patcher = self.fake_quota(remaining=4200)
+        with patcher:
+            self.client().get("/api/status")
+
+        async def broken(auth):
+            return None
+
+        self.dashboard._quota_at = 0
+        with mock.patch("dashboard.get_rate_limits", broken):
+            quota = self.client().get("/api/status").json()["quota"]
+        self.assertEqual(quota["source"], "eBay")
+        self.assertEqual(quota["remaining"], 4200)
 
     def test_status_content(self):
         self.store.add_keyword("RTX 4090")

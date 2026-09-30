@@ -46,12 +46,25 @@ class Notifier:
     async def _send_listing_to(self, chat_id: int, item: Listing, text: str) -> bool:
         button = InlineKeyboardMarkup([[InlineKeyboardButton("Apri annuncio", url=item.url)]])
         photos = item.images[: config.MAX_PHOTOS]
-        try:
-            if len(photos) > 1:
+        if len(photos) > 1:
+            try:
                 media = [InputMediaPhoto(url) for url in photos]
                 media[0] = InputMediaPhoto(photos[0], caption=text, parse_mode=ParseMode.HTML)
                 await self.bot.send_media_group(chat_id, media)
                 return True
+            except BadRequest as exc:
+                log.warning("Album rifiutato da Telegram (%s), provo con la sola prima foto", exc)
+                photos = photos[:1]
+            except Forbidden as exc:
+                log.warning("La chat %s ha bloccato il bot: %s", chat_id, exc)
+                return False
+            except (RetryAfter, TimedOut, NetworkError) as exc:
+                log.warning("Telegram non disponibile, riprovo al prossimo ciclo: %s", exc)
+                return False
+            except TelegramError as exc:
+                log.warning("Invio album fallito (%s), provo con la sola prima foto", exc)
+                photos = photos[:1]
+        try:
             if len(photos) == 1:
                 await self.bot.send_photo(chat_id, photos[0], caption=text,
                                           parse_mode=ParseMode.HTML, reply_markup=button)
@@ -60,7 +73,7 @@ class Notifier:
             log.warning("La chat %s ha bloccato il bot: %s", chat_id, exc)
             return False
         except BadRequest as exc:
-            log.warning("Foto rifiutate da Telegram (%s), invio solo testo", exc)
+            log.warning("Foto rifiutata da Telegram (%s), invio solo testo", exc)
         except (RetryAfter, TimedOut, NetworkError) as exc:
             log.warning("Telegram non disponibile, riprovo al prossimo ciclo: %s", exc)
             return False
